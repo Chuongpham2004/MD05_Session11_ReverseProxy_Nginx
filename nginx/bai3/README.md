@@ -95,6 +95,12 @@ TLSv1.2  ECDHE-RSA-AES256-GCM-SHA384    ✅
 TLSv1.3  TLS_AES_256_GCM_SHA384         ✅
 ```
 
+**Ảnh chụp trên VPS:** Nginx trả `301 Moved Permanently` từ HTTP sang HTTPS.
+
+![curl -I http://chuong.omniev.tech trả về 301 Moved Permanently, Location: https://chuong.omniev.tech/](images/curl-301-redirect.png)
+
+> Trình duyệt Chrome thường **không cho thấy** 301 này. Chrome tự thử `https://` trước khi bạn gõ tên miền (HTTPS-Upgrades), hoặc dùng lại 301 đã lưu trong cache. `curl` không tự nâng cấp lên HTTPS, nên đây là cách chắc chắn nhất để thấy phản hồi thật của Nginx.
+
 File Nginx do certbot sửa: xem [`certbot-generated.conf`](certbot-generated.conf). Các dòng có `# managed by Certbot` là do certbot tự thêm.
 
 ## 3. Cấu hình HTTPS viết tay (port 443)
