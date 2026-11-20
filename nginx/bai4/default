@@ -1,0 +1,75 @@
+# /etc/nginx/sites-available/default
+# Bài 4 - Tối ưu: cho phép upload 10MB + nén Gzip (tiếp nối cấu hình bài 2)
+#
+# Quy trình áp dụng an toàn trên production:
+#   sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name domain.com www.domain.com;
+
+    # =====================================================================
+    # 1) UPLOAD: client_max_body_size
+    # =====================================================================
+    # Mặc định = 1m  -> ảnh avatar 3MB bị Nginx chặn ngay với "413 Request Entity Too Large",
+    # request KHÔNG BAO GIỜ tới được backend.
+    # Đặt ở server = áp dụng cho mọi location bên dưới (location có thể ghi đè).
+    client_max_body_size 10M;
+
+    # =====================================================================
+    # 2) GZIP: nén response dạng văn bản trước khi gửi về client
+    # =====================================================================
+    # Lưu ý Ubuntu: /etc/nginx/nginx.conf đã có sẵn "gzip on;" ở khối http.
+    # Viết lại các chỉ thị gzip ở khối http trong conf.d/ sẽ lỗi "directive is duplicate".
+    # Đặt ở khối server (như dưới đây) thì hợp lệ: cấu hình server ghi đè http.
+    gzip on;
+    gzip_vary on;              # thêm "Vary: Accept-Encoding" để CDN/proxy cache đúng 2 bản (nén / không nén)
+    gzip_proxied any;          # vẫn nén khi request đi qua proxy/CDN (có header Via). Mặc định off!
+    gzip_comp_level 5;         # 1-9: mức 5 nén gần bằng 9 nhưng tốn ít CPU hơn nhiều
+    gzip_min_length 256;       # file quá nhỏ nén không lợi (header gzip ~20 byte)
+    gzip_types                 # text/html LUÔN được nén, không cần (và không nên) liệt kê
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/x-javascript
+        application/json
+        application/xml
+        application/rss+xml
+        application/manifest+json
+        image/svg+xml
+        font/ttf
+        font/otf;
+    # KHÔNG nén: jpg/png/webp/mp4/zip/woff2 - đã nén sẵn, nén lại chỉ tốn CPU mà không nhỏ đi.
+
+    # ---------- Backend API Gateway ----------
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Upload avatar: có thể nới riêng cho đúng endpoint thay vì cả site
+    # location = /api/users/avatar {
+    #     client_max_body_size 10M;
+    #     proxy_request_buffering off;   # stream thẳng file lên backend, không đệm ra đĩa
+    #     proxy_pass http://127.0.0.1:8080;
+    # }
+
+    # ---------- React Frontend ----------
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
