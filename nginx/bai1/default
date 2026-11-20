@@ -1,0 +1,37 @@
+# /etc/nginx/sites-available/default
+# Bài 1 - Reverse Proxy cơ bản: Port 80  --->  React app ở localhost:3000
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name domain.com www.domain.com;
+
+    # Log riêng để dễ debug khi upstream lỗi (502/504)
+    access_log /var/log/nginx/ecommerce_access.log;
+    error_log  /var/log/nginx/ecommerce_error.log;
+
+    location / {
+        # Chuyển tiếp mọi request tới app nội bộ.
+        # Dùng 127.0.0.1 thay vì "localhost" để tránh Nginx thử ::1 (IPv6) trước
+        # trong khi app chỉ lắng nghe IPv4.
+        proxy_pass http://127.0.0.1:3000;
+
+        proxy_http_version 1.1;
+
+        # Giữ lại thông tin gốc của client cho app phía sau
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Hỗ trợ WebSocket (React dev server / HMR cần cái này)
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeout (mặc định 60s) - quyết định khi nào trả 504
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;
+        proxy_send_timeout    60s;
+    }
+}

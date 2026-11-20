@@ -1,0 +1,45 @@
+# /etc/nginx/sites-available/default  (SAU KHI chạy certbot --nginx)
+# Đây là dạng cấu hình mà Certbot sinh ra / bạn có thể tự viết lại cho gọn.
+
+# 1) HTTP -> chuyển hướng toàn bộ sang HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name domain.com www.domain.com;
+
+    # Certbot (webroot / renew) cần đường này truy cập được qua HTTP
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 2) HTTPS -> reverse proxy tới React app
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;   # Nginx >= 1.25.1; bản cũ hơn dùng: listen 443 ssl http2;
+
+    server_name domain.com www.domain.com;
+
+    ssl_certificate     /etc/letsencrypt/live/domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/domain.com/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
