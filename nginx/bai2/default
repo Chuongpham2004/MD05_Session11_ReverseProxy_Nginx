@@ -1,0 +1,51 @@
+# /etc/nginx/sites-available/default
+# Bài 2 - Path-based routing trên cùng 1 domain (port 80):
+#   /api/...  --->  Backend API Gateway  (127.0.0.1:8080)
+#   còn lại   --->  React Frontend       (127.0.0.1:3000)
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name domain.com www.domain.com;
+
+    access_log /var/log/nginx/ecommerce_access.log;
+    error_log  /var/log/nginx/ecommerce_error.log;
+
+    # ---------- Backend API Gateway ----------
+    # Prefix match: mọi URI bắt đầu bằng /api/ (vd. /api/products, /api/orders/1).
+    # Nginx chọn location có prefix KHỚP DÀI NHẤT, nên /api/ thắng / bất kể thứ tự viết.
+    location /api/ {
+        # KHÔNG có "/" sau port -> giữ nguyên URI:
+        #   /api/products  ->  http://127.0.0.1:8080/api/products
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        # Header quan trọng cho backend
+        proxy_set_header Host              $host;                       # tên miền gốc client gõ
+        proxy_set_header X-Real-IP         $remote_addr;                # IP thật của client
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;  # chuỗi IP qua các proxy
+        proxy_set_header X-Forwarded-Proto $scheme;                     # http / https
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;
+    }
+
+    # ---------- React Frontend ----------
+    # Mọi request còn lại: /, /about, /products, /static/js/...
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket cho React dev server (hot reload)
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
