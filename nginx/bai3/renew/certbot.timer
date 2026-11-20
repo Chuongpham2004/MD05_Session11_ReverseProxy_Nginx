@@ -1,0 +1,16 @@
+# /etc/systemd/system/certbot.timer
+# Cách 1 (systemd timer) - khuyên dùng trên Ubuntu hiện đại.
+# Giống hệt timer thật trên VPS (/lib/systemd/system/certbot.timer).
+[Unit]
+Description=Run certbot twice daily
+
+[Timer]
+# Chạy lúc 00:00 và 12:00 mỗi ngày
+OnCalendar=*-*-* 00,12:00:00
+# Cộng thêm độ trễ ngẫu nhiên 0-12h để hàng triệu server không cùng gọi Let's Encrypt một lúc
+RandomizedDelaySec=43200
+# Nếu máy tắt đúng giờ chạy, bật lên sẽ chạy bù ngay
+Persistent=true
+
+[Install]
+WantedBy=timers.target

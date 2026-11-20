@@ -1,0 +1,13 @@
+# /etc/systemd/system/certbot.service
+# (Gói certbot từ apt đã cài sẵn file tương tự ở /lib/systemd/system/certbot.service.
+#  File này dùng khi cài certbot bằng pip/thủ công, hoặc muốn tự viết.)
+[Unit]
+Description=Certbot - gia han chung chi Let's Encrypt
+Documentation=https://certbot.eff.org/docs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot -q renew --deploy-hook "systemctl reload nginx"
+PrivateTmp=true

@@ -1,0 +1,11 @@
+# /etc/cron.d/certbot-renew
+# Cách 2 (cron) - dùng khi máy KHÔNG có systemd, hoặc muốn tự kiểm soát lịch.
+# Định dạng /etc/cron.d có thêm cột USER (root) so với "crontab -e".
+#
+# phút giờ ngày tháng thứ  user  lệnh
+# Chạy 03:17 và 15:17 mỗi ngày (2 lần/ngày như khuyến nghị; tránh phút 0 để không dồn tải lên Let's Encrypt).
+# certbot renew chỉ thực sự gia hạn khi cert còn < 30 ngày, các lần khác không làm gì.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+17 3,15 * * * root certbot renew --quiet --deploy-hook "systemctl reload nginx" >> /var/log/certbot-renew.log 2>&1
