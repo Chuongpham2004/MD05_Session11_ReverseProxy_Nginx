@@ -1,0 +1,45 @@
+server {
+    server_name chuong.omniev.tech;
+
+    root /var/www/chuong;
+    index index.html;
+
+    # ===== Bai 4: upload toi 10MB =====
+    client_max_body_size 10M;
+
+    # ===== Bai 4: nen gzip cho file van ban =====
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 256;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/json application/xml application/rss+xml application/manifest+json image/svg+xml font/ttf font/otf;
+
+    # Endpoint thu upload (Nginx tra loi truc tiep, khong luu file)
+    location = /api/upload {
+        default_type text/plain;
+        return 200 "Upload OK: Nginx da nhan $content_length bytes\n";
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/chuong.omniev.tech/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/chuong.omniev.tech/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+}
+
+server {
+    if ($host = chuong.omniev.tech) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+    listen 80;
+    listen [::]:80;
+    server_name chuong.omniev.tech;
+    return 404; # managed by Certbot
+}

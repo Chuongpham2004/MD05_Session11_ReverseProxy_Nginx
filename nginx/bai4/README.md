@@ -193,3 +193,44 @@ curl -sI -H "Accept-Encoding: gzip" https://domain.com/static/js/main.js | grep 
 | `systemctl restart nginx` | Hiếm khi cần: Nginx bị treo hoặc không phản hồi tín hiệu. Chỉ làm **ngoài giờ cao điểm** và sau khi đã `nginx -t` |
 
 > `nginx -t` chỉ kiểm tra **cú pháp**, không kiểm tra **logic**: trỏ nhầm port hay sai `server_name` thì vẫn báo "successful". Vì vậy luôn kiểm tra lại bằng `curl` sau khi reload.
+
+## 5. Áp dụng thật trên production: `chuong.omniev.tech`
+
+VPS chạy Ubuntu 22.04 và Nginx 1.18, có HTTPS từ bài 3. File cấu hình đã áp dụng: [`chuong.omniev.tech`](chuong.omniev.tech). Đây là file do certbot sinh ra ở bài 3, thêm `client_max_body_size` và `gzip_*` vào block 443, cùng một endpoint `/api/upload` để thử upload.
+
+`nginx.conf` trên VPS xác nhận đúng điều đã nói ở mục 2: có sẵn `gzip on;` nhưng `gzip_types` bị comment, nên **chỉ HTML được nén**:
+
+```text
+$ grep -n gzip /etc/nginx/nginx.conf
+46:     gzip on;
+48:     # gzip_vary on;
+...
+53:     # gzip_types text/plain text/css application/json application/javascript ...
+```
+
+### Kết quả đo từ bên ngoài (Internet → `https://chuong.omniev.tech`)
+
+| Request | Trước | Sau |
+|---|---|---|
+| `GET /static/app.js` | 131.835 B, không nén | **43.387 B**, `gzip` (−67%) |
+| `GET /static/style.css` | 232.803 B, không nén | **31.840 B**, `gzip` (−86%) |
+| `GET /api/products.json` | 59.281 B, không nén | **4.212 B**, `gzip` (−93%) |
+| `GET /` (79 B) | `gzip` (mặc định của Ubuntu) | Không nén, vì < `gzip_min_length 256` |
+| `POST /api/upload` 3MB | **`413`** | **`200`** `Upload OK: Nginx da nhan 3145728 bytes` |
+| `POST /api/upload` 11MB | `413` | `413` (vẫn chặn file > 10MB) |
+| `http://` → `https://` (bài 3) | `301` | `301`, không bị ảnh hưởng |
+
+Mọi phản hồi được nén đều kèm `Vary: Accept-Encoding`.
+
+### Thử bẫy trên production: `reload` với config sai
+
+Cố tình xoá dấu `;`, rồi chạy `nginx -t` và `reload`:
+
+![nginx -t báo emerg, systemctl reload thất bại nhưng curl vẫn trả 200 OK](images/reload-config-loi-site-van-song.png)
+
+1. `nginx -t` **bắt được lỗi** trước khi áp dụng: `[emerg] invalid number of arguments in "client_max_body_size"`.
+2. `systemctl reload nginx` → `Job for nginx.service failed`: Nginx **từ chối** nạp config sai.
+3. Ngay sau đó `curl` vẫn nhận **`HTTP/1.1 200 OK`**: site **không sập**, vẫn phục vụ bằng config cũ.
+4. Sửa lại dấu `;`, rồi `nginx -t && systemctl reload nginx` → áp dụng thành công.
+
+Nếu ở bước 2 gõ `systemctl restart nginx`, Nginx sẽ dừng hẳn mà không khởi động lại được, tức là kịch bản 4 ở mục 4: **website sập hoàn toàn**.
