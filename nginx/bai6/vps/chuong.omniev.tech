@@ -1,0 +1,76 @@
+# /etc/nginx/sites-available/chuong.omniev.tech
+# Bài 6 trên production: domain chính, /api/ chia tải Round Robin cho 3 backend.
+# (Kế thừa bài 3: HTTPS certbot, bài 4: upload 10MB + gzip)
+
+# ===== Bai 6: upstream 3 instance backend (Round Robin mac dinh) =====
+upstream backend_api {
+    zone backend_api 64k;     # worker dung chung bo dem RR + bo dem loi
+    server 127.0.0.1:8080 max_fails=3 fail_timeout=30s;
+    server 127.0.0.1:8081 max_fails=3 fail_timeout=30s;
+    server 127.0.0.1:8082 max_fails=3 fail_timeout=30s;
+    keepalive 32;
+}
+
+server {
+    server_name chuong.omniev.tech;
+
+    root /var/www/chuong;
+    index index.html;
+
+    # ===== Bai 4: upload toi 10MB =====
+    client_max_body_size 10M;
+
+    # ===== Bai 4: nen gzip cho file van ban =====
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 256;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/json application/xml application/rss+xml application/manifest+json image/svg+xml font/ttf font/otf;
+
+    # ===== Bai 6: /api/ -> Load Balancing =====
+    location /api/ {
+        proxy_pass http://backend_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 8080 chet -> gui lai ngay request sang server ke tiep
+        proxy_next_upstream         error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries   2;
+        proxy_next_upstream_timeout 10s;
+        proxy_connect_timeout       2s;
+        proxy_read_timeout          30s;
+
+        # Trang admin (subdomain khac) goi /api/health bang fetch -> can CORS
+        add_header Access-Control-Allow-Origin "https://admin.chuong.omniev.tech" always;
+        # Cho biet upstream nao da xu ly -> de kiem chung Round Robin tu ben ngoai
+        add_header X-Upstream $upstream_addr always;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/chuong.omniev.tech/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/chuong.omniev.tech/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+}
+
+server {
+    if ($host = chuong.omniev.tech) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+    listen 80;
+    listen [::]:80;
+    server_name chuong.omniev.tech;
+    return 404; # managed by Certbot
+}

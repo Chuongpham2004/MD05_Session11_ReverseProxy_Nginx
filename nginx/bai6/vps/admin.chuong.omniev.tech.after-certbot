@@ -1,0 +1,57 @@
+# /etc/nginx/sites-available/admin.chuong.omniev.tech
+# Bài 6 trên production: subdomain admin -> container "React Admin" 127.0.0.1:4000
+# Ban đầu chỉ có port 80. Chạy `certbot --nginx -d admin.chuong.omniev.tech --redirect`
+# thì certbot tự thêm block 443 + redirect 80 -> 443 vào chính file này.
+
+upstream react_admin {
+    zone react_admin 64k;
+    server 127.0.0.1:4000;
+    keepalive 8;
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+server {
+    server_name admin.chuong.omniev.tech;
+
+    # (Khuyen nghi) chi cho IP cong ty / VPN:
+    # allow 203.0.113.0/24;
+    # deny  all;
+
+    location / {
+        proxy_pass http://react_admin;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen [::]:443 ssl; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/admin.chuong.omniev.tech/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/admin.chuong.omniev.tech/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+
+server {
+    if ($host = admin.chuong.omniev.tech) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name admin.chuong.omniev.tech;
+    return 404; # managed by Certbot
+
+
+}

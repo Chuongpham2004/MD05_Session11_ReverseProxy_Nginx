@@ -152,7 +152,77 @@ Khi có hàng nghìn request, tải vẫn chia gần đều. Nhưng thiếu `zon
 
 > Lưu ý: `nginx -s reload` tạo lại upstream nên **xoá trạng thái lỗi**. Server đang bị loại sẽ được thử lại ngay sau khi reload.
 
-## 6. Mở rộng cho production
+## 6. Áp dụng lên production: `chuong.omniev.tech`
+
+> Domain trong đề là ví dụ. Bài làm được triển khai thật trên VPS (Ubuntu 22.04, Nginx 1.18, 1 CPU, 950MB RAM), cùng VPS với bài 3 và bài 4:
+> `my-ecommerce.com` → **`chuong.omniev.tech`**, `admin.my-ecommerce.com` → **`admin.chuong.omniev.tech`**
+
+| File trong [`vps/`](vps/) | Vai trò |
+|---|---|
+| [`start-containers.sh`](vps/start-containers.sh) | Chạy 3 backend `backend-8080/8081/8082` và `react-admin` (:4000) bằng Docker, **chỉ bind `127.0.0.1`** |
+| [`backend/default.conf.template`](vps/backend/default.conf.template) | Backend giả lập: trả JSON cho biết instance nào xử lý. VPS chỉ có 950MB RAM nên không chạy 3 JVM |
+| [`admin/index.html`](vps/admin/index.html) | Trang "React Admin", gọi `/api/health` 6 lần để thấy Round Robin ngay trên giao diện |
+| [`chuong.omniev.tech`](vps/chuong.omniev.tech) | File site đang chạy (bài 3 + 4) thêm `upstream backend_api` và `location /api/` |
+| [`admin.chuong.omniev.tech`](vps/admin.chuong.omniev.tech) | Block subdomain admin (port 80) trước khi chạy certbot |
+| [`admin.chuong.omniev.tech.after-certbot`](vps/admin.chuong.omniev.tech.after-certbot) | Cùng file đó **sau khi** certbot tự thêm 443 + redirect (lấy từ VPS) |
+| [`apply.sh`](vps/apply.sh) | Backup → copy → `nginx -t` → `reload`; config lỗi thì **tự rollback**; có DNS thì chạy certbot cho `admin.` |
+
+```bash
+bash ~/bai6/start-containers.sh          # user deployer (nhóm docker), không cần sudo
+sudo bash ~/bai6/apply.sh                # sửa /etc/nginx + reload + certbot
+```
+
+**Bản ghi DNS (Cloudflare, chế độ DNS only):** `A  admin.chuong  221.121.2.29`
+
+> ⚠️ **Bẫy DNS gặp khi làm:** lần đầu ô *Name* được điền `admin`. Vì zone là `omniev.tech`, bản ghi thành **`admin.omniev.tech`**, còn `admin.chuong.omniev.tech` trả `NXDOMAIN`. Script thấy tên chưa phân giải được nên bỏ qua certbot. Ô Name phải là `admin.chuong`. Kiểm tra trước khi chạy certbot: `dig +short admin.chuong.omniev.tech`.
+
+### Kết quả kiểm tra từ Internet
+
+**Subdomain admin + HTTPS:**
+
+```text
+$ curl -I http://admin.chuong.omniev.tech/
+HTTP/1.1 301 Moved Permanently -> https://admin.chuong.omniev.tech/
+
+$ curl https://admin.chuong.omniev.tech/
+200  <title>My E-commerce Admin</title>        <- container react-admin :4000
+
+subject=CN=admin.chuong.omniev.tech
+issuer=C=US, O=Let's Encrypt, CN=YR1
+notAfter=Feb 20 01:35:05 2027 GMT
+
+$ curl http://221.121.2.29:8080/               <- gọi thẳng backend từ Internet
+(không kết nối được: container chỉ bind 127.0.0.1, bắt buộc đi qua Nginx)
+```
+
+**Round Robin + failover** trên `https://chuong.omniev.tech/api/orders`. Header `X-Upstream` (`$upstream_addr`) cho biết server nào đã xử lý:
+
+```text
+A) 3 server sống        200:8080 200:8081 200:8082 200:8080 200:8081 200:8082
+   $ docker stop backend-8080
+B) 8080 chết (12 req)   12/12 đều 200, chỉ 8081 và 8082 trả lời
+C) docker start ngay    200:8081 200:8082 200:8081 200:8082 200:8081 200:8082   <- vẫn bị loại trong 30s
+D) sau 30s              200:8081 200:8082 200:8080 200:8081 200:8082 200:8080   <- 8080 tự quay lại
+```
+
+Lúc 8080 vừa chết, request rơi vào 8080 được gửi lại ngay sang 8081 và khách vẫn nhận `200`:
+
+```text
+X-Upstream: 127.0.0.1:8082                      200
+X-Upstream: 127.0.0.1:8080, 127.0.0.1:8081      200   <- thử 8080 lỗi, chuyển sang 8081
+X-Upstream: 127.0.0.1:8082                      200
+X-Upstream: 127.0.0.1:8081                      200
+```
+
+Backend nhận đúng IP thật của khách nhờ `X-Real-IP`, không phải `127.0.0.1`:
+
+```json
+{"instance":"backend-8080","method":"GET","uri":"/api/orders","client_ip":"117.5.147.164"}
+```
+
+> VPS chỉ có **1 CPU nên chỉ 1 worker**, vì vậy bẫy thiếu `zone` ở mục 5 không xuất hiện ở đây. Cấu hình vẫn giữ `zone` để đúng khi nâng cấp lên máy nhiều nhân.
+
+## 7. Mở rộng cho production
 
 - **HTTPS**: thêm `listen 443 ssl` cho cả hai block và xin chứng chỉ cho cả ba tên: `certbot --nginx -d my-ecommerce.com -d www.my-ecommerce.com -d admin.my-ecommerce.com` (bài 3).
 - **Bảo vệ trang admin**: `allow <IP công ty/VPN>; deny all;` (đã để sẵn dạng comment trong file), hoặc `auth_basic`.

@@ -1,0 +1,11 @@
+# Backend giả lập (1 instance). Trả JSON cho biết instance nào đã xử lý request.
+server {
+    listen 80;
+    default_type application/json;
+    add_header X-Backend-Instance ${INSTANCE} always;
+
+    location = /api/health { return 200 '{"status":"UP","instance":"${INSTANCE}"}\n'; }
+    location / {
+        return 200 '{"instance":"${INSTANCE}","container":"$hostname","method":"$request_method","uri":"$request_uri","client_ip":"$http_x_real_ip"}\n';
+    }
+}

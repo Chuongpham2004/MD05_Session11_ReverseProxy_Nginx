@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My E-commerce Admin</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --muted:#6b7385; --accent:#2f6fed; --line:#e3e6ec; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--ink); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
+  header b { font-size:18px; }
+  header span { font-size:13px; opacity:.7; }
+  main { max-width:960px; margin:24px auto; padding:0 16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .card small { color:var(--muted); }
+  .card h2 { margin:6px 0 0; font-size:26px; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:14px; }
+  td, th { text-align:left; padding:8px; border-bottom:1px solid var(--line); }
+  code { background:#eef1f6; padding:2px 6px; border-radius:4px; }
+  .ok { color:#1a8f4c; font-weight:600; } .bad { color:#c62828; font-weight:600; }
+</style>
+</head>
+<body>
+<header><b>My E-commerce · Admin</b><span>admin.chuong.omniev.tech → container :4000</span></header>
+<main>
+  <div class="grid">
+    <div class="card"><small>Đơn hàng Black Friday</small><h2>1.284</h2></div>
+    <div class="card"><small>Doanh thu hôm nay</small><h2>₫ 482,6 tr</h2></div>
+    <div class="card"><small>Backend instance</small><h2>3</h2></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <b>Trạng thái backend</b> <small>(gọi <code>https://chuong.omniev.tech/api/health</code> 6 lần, Nginx chia Round Robin)</small>
+    <table><thead><tr><th>#</th><th>Instance</th><th>Trạng thái</th></tr></thead><tbody id="rows"><tr><td colspan="3">Đang kiểm tra…</td></tr></tbody></table>
+  </div>
+</main>
+<script>
+(async () => {
+  const rows = document.getElementById('rows'); rows.innerHTML = '';
+  for (let i = 1; i <= 6; i++) {
+    const tr = document.createElement('tr');
+    try {
+      const r = await fetch('https://chuong.omniev.tech/api/health?n=' + i + '&t=' + Date.now(), { cache: 'no-store' });
+      const j = await r.json();
+      tr.innerHTML = `<td>${i}</td><td><code>${j.instance}</code></td><td class="ok">${j.status}</td>`;
+    } catch (e) {
+      tr.innerHTML = `<td>${i}</td><td>-</td><td class="bad">Lỗi</td>`;
+    }
+    rows.appendChild(tr);
+  }
+})();
+</script>
+</body>
+</html>
